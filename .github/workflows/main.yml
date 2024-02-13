@@ -29,7 +29,6 @@ jobs:
 
 
   build-win:
-    needs: [ is-latest ]
     runs-on: windows-latest
     defaults:
       run:
@@ -57,7 +56,6 @@ jobs:
           path: 'c:/a/**/build/out/*.zip'
 
   build-macos:
-    needs: [ is-latest ]
     runs-on: macos-latest
     steps:
       - name: Setup Node
@@ -78,7 +76,6 @@ jobs:
           path: 'build/out/*.zip'
 
   build-linux:
-    needs: [ is-latest ]
     runs-on: ubuntu-latest
     steps:
       - name: Setup Node
