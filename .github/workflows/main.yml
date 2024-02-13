@@ -114,7 +114,7 @@ jobs:
           path: 'build/out/*.zip'
 
   build-release:
-    needs: [ build-win, build-macos, build-linux ]
+    needs: [ build-linux ]
     name: "Build Release"
     runs-on: "ubuntu-latest"
     steps:
