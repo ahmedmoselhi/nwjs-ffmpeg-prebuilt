@@ -125,44 +125,18 @@ jobs:
 
       - uses: actions/download-artifact@v3
         with:
-          name: win
-          path: release/win
-      - uses: actions/download-artifact@v3
-        with:
           name: linux
           path: release/linux
-      - uses: actions/download-artifact@v3
-        with:
-          name: mac
-          path: release/mac
 
       - name: Display structure of downloaded files
         run: ls -R
         working-directory: release/
-
-      - name: Upload mac binaries to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: release/mac/*.zip
-          tag: ${{ env.NW }}
-          overwrite: true
-          file_glob: true
 
       - name: Upload linux binaries to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: release/linux/*.zip
-          tag: ${{ env.NW }}
-          overwrite: true
-          file_glob: true
-
-      - name: Upload windows binaries to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: release/win/nwjs-ffmpeg-prebuilt/nwjs-ffmpeg-prebuilt/build/out/*.zip
           tag: ${{ env.NW }}
           overwrite: true
           file_glob: true
