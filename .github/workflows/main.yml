@@ -3,8 +3,6 @@ name: CI
 on:
   release:
     types: [ created ]
-  schedule:
-    - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
       version:
@@ -16,71 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  is-latest:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Check if latest
-        working-directory: .github/workflows
-        run: bash ./is_latest.sh ${{ github.event_name }}
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-
-
-  build-win:
-    needs: [ is-latest ]
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: powershell
-    steps:
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 16
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Copy to C drive
-        run: cp D:\a C:\ -Recurse
-      - name: Support long paths
-        run: git config --system core.longpaths true
-      - name: npm install, build and test
-        working-directory: "C:/a/${{ github.event.repository.name }}/${{ github.event.repository.name }}"
-        run: |
-          pwd
-          npm install
-          node build --arch x64
-          node build --arch ia32
-      - name: Upload the artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: win
-          path: 'c:/a/**/build/out/*.zip'
-
-  build-macos:
-    needs: [ is-latest ]
-    runs-on: macos-latest
-    steps:
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 16
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: npm install, build and test
-        run: |
-          npm install
-          node build -a x64
-          node build -a arm64
-      - name: Upload the artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: mac
-          path: 'build/out/*.zip'
-
   build-linux:
-    needs: [ is-latest ]
     runs-on: ubuntu-latest
     steps:
       - name: Setup Node
@@ -108,7 +42,6 @@ jobs:
         run: |
           npm install
           node build --arch x64
-          node build --arch ia32
       - name: Upload the artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -116,7 +49,7 @@ jobs:
           path: 'build/out/*.zip'
 
   build-release:
-    needs: [ build-win, build-macos, build-linux ]
+    needs: [ build-linux ]
     name: "Build Release"
     runs-on: "ubuntu-latest"
     steps:
@@ -128,46 +61,20 @@ jobs:
             echo "NW=$(curl -s https://nwjs.io/versions | jq -r '.latest' | sed 's/v//')" >> $GITHUB_ENV
           fi
 
-      - uses: actions/download-artifact@v3
-        with:
-          name: win
-          path: release/win
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4.1.2
         with:
           name: linux
           path: release/linux
-      - uses: actions/download-artifact@v4
-        with:
-          name: mac
-          path: release/mac
 
       - name: Display structure of downloaded files
         run: ls -R
         working-directory: release/
-
-      - name: Upload mac binaries to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: release/mac/*.zip
-          tag: ${{ env.NW }}
-          overwrite: true
-          file_glob: true
 
       - name: Upload linux binaries to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: release/linux/*.zip
-          tag: ${{ env.NW }}
-          overwrite: true
-          file_glob: true
-
-      - name: Upload windows binaries to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: release/win/nwjs-ffmpeg-prebuilt/nwjs-ffmpeg-prebuilt/build/out/*.zip
           tag: ${{ env.NW }}
           overwrite: true
           file_glob: true
