@@ -16,32 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  is-latest:
-    name: "Is Latest"
-    runs-on: ubuntu-latest
-    outputs:
-      nw: ${{ steps.set_nw.outputs.nw }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4.2.2
-      - name: Check if latest
-        working-directory: .github/workflows
-        run: bash ./is_latest.sh ${{ github.event_name }}
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-      - name: Write NW version to env and set output
-        id: set_nw
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "nw=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            NW_VERSION=$(curl -s https://nwjs.io/versions | jq -r '.latest' | sed 's/v//')
-            echo "nw=$NW_VERSION" >> $GITHUB_OUTPUT
-          fi
-
-
   build-win:
-    needs: is-latest
     name: "Build for Windows"
     runs-on: windows-latest
     defaults:
@@ -75,7 +50,6 @@ jobs:
           path: 'c:/a/**/build/out/*.zip'
 
   build-macos:
-    needs: is-latest
     name: "Build for MacOS"
     runs-on: macos-latest
     steps:
@@ -104,7 +78,6 @@ jobs:
           path: 'build/out/*.zip'
 
   build-linux:
-    needs: is-latest
     name: "Build for Linux"
     runs-on: ubuntu-latest
     steps:
