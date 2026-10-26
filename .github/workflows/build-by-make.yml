@@ -8,9 +8,16 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number to build'
+        description: 'NW.js version to build (e.g. 0.106.1)'
         required: true
         default: '0.106.1'
+        type: string
+      force:
+        description: 'Force build even if release already exists'
+        required: false
+        default: true
+        type: boolean
+
 concurrency:
   group: ${{ github.ref }}-make
   cancel-in-progress: false
@@ -21,7 +28,7 @@ permissions:
 
 jobs:
   is-latest:
-    name: "Is Latest"
+    name: "Is Latest / Version Selection"
     runs-on: ubuntu-latest
     outputs:
       nw: ${{ steps.set_nw.outputs.nw }}
@@ -36,20 +43,34 @@ jobs:
       - name: Write NW version to env and set output
         id: set_nw
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            NW_VERSION=${{ github.event.inputs.version }}
-            echo "nw=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
+            NW_VERSION="${{ github.event.inputs.version }}"
+            echo "nw=$NW_VERSION" >> $GITHUB_OUTPUT
+            echo "Using manual input version: $NW_VERSION"
+            
+            # Check if release exists when force is set to false
+            if [ "${{ github.event.inputs.force }}" = "false" ]; then
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://github.com/nwjs-ffmpeg-prebuilt/nwjs-ffmpeg-prebuilt/releases/download/${NW_VERSION}/${NW_VERSION}-linux-x64.zip)
+              if [ "$HTTP_CODE" != "404" ]; then
+                echo "Error: Version $NW_VERSION already exists and force is false."
+                exit 1
+              fi
+            fi
           else
             NW_VERSION=$(curl -s https://nwjs.io/versions.json | jq -r '.latest' | sed 's/v//')
             echo "nw=$NW_VERSION" >> $GITHUB_OUTPUT
-            # Fail for already released ver
-            curl -s -o /dev/null -w "%{http_code}" https://github.com/nwjs-ffmpeg-prebuilt/nwjs-ffmpeg-prebuilt/releases/download/${NW_VERSION}/${NW_VERSION}-linux-x64.zip | grep 404
+            # Fail for already released ver on automated runs
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://github.com/nwjs-ffmpeg-prebuilt/nwjs-ffmpeg-prebuilt/releases/download/${NW_VERSION}/${NW_VERSION}-linux-x64.zip)
+            if [ "$HTTP_CODE" != "404" ]; then
+              echo "Error: Latest version $NW_VERSION has already been released."
+              exit 1
+            fi
           fi
 
           CHROMIUM=$(curl -s https://nwjs.io/versions.json | jq -r ".versions[] | select(.version==\"v$NW_VERSION\") | .components.chromium")
           echo "chromium=$CHROMIUM" >> $GITHUB_OUTPUT
           _commit=$(curl -sL https://chromium.googlesource.com/chromium/src.git/+/refs/tags/${CHROMIUM}/DEPS?format=TEXT | base64 -d | grep -oP "'ffmpeg_revision': '\K[0-9a-f]{40}'" | tr -d \')
-           echo "commit=$_commit" >> $GITHUB_OUTPUT
+          echo "commit=$_commit" >> $GITHUB_OUTPUT
           _url=https://chromium.googlesource.com/chromium/third_party/ffmpeg
           SO=$(curl -sL ${_url}/+/${_commit}/libavcodec/version_major.h?format=TEXT|base64 -d | grep -oP 'LIBAVCODEC_VERSION_MAJOR\s+\K\d+')
           echo "avcodec=$SO" >> $GITHUB_OUTPUT
@@ -71,12 +92,8 @@ jobs:
             soname: libffmpeg.so
           - target: linux-arm64
             host: ubuntu-24.04-arm
-            setupcmd: true # ARM does not use nasm
+            setupcmd: true
             soname: libffmpeg.so
-          #- target: win-arm64
-            #host: ubuntu-latest # Ubuntu repo does not have the cross-gcc yet. But we should switch to cross-build since it would faster than native
-            #setupcmd: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-aarch64
-            #soname: libffmpeg.so
           - target: win-x64
             host: ubuntu-latest
             setupcmd: sudo apt-get update && sudo apt-get install -y nasm gcc-mingw-w64-x86-64
@@ -87,7 +104,7 @@ jobs:
             soname: ffmpeg.dll
           - target: osx-arm64
             host: macos-latest
-            setupcmd: true # ARM does not use nasm
+            setupcmd: true
             soname: libffmpeg.dylib
           - target: osx-x64
             host: macos-latest
@@ -113,11 +130,6 @@ jobs:
           name: ${{ matrix.target }}
           path: '/tmp/ff/*.zip'
 
-  # Should have this as a different CI to avoid stopping Ubuntu CI
-  # x86_64-gcc is a stange dep. But needed
-  # Use mingw-w64-cross-mingwarm64-gcc instead of mingw-w64-clang-aarch64-gcc-compat
-  # Use Cygwin make instead of native make
-  # Install tools works on win11-arm host 1st and install tools for arm target
   build-msys2:
     needs: is-latest
     name: "Build for ${{ matrix.target }}"
@@ -125,12 +137,8 @@ jobs:
     strategy:
       matrix:
         include:
-  #        - target: win-x64
-  #          pkgs: mingw-w64-cross-mingw64-binutils
-          - target: win-arm64 # Should switch to cross-build on Ubuntu
+          - target: win-arm64
             pkgs: mingw-w64-cross-mingwarm64-gcc mingw-w64-cross-mingwarm64-binutils
-  #        - target: win-ia32
-  #          pkgs: mingw-w64-i686-gcc mingw-w64-i686-binutils mingw-w64-cross-mingw32-binutils
     steps:
       - name: Checkout code
         uses: actions/checkout@v5.0.0
